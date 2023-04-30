@@ -1,12 +1,11 @@
 import jwt from 'jsonwebtoken';
-import { keySecret } from '../private.js';
 
 export default (req, res, next) => {
   const token = (req.headers.authorization || '').replace(/Bearer\s?/, '');
 
   if (token) {
     try {
-      const decoded = jwt.verify(token, keySecret);
+      const decoded = jwt.verify(token, 'key89');
 
       req.userId = decoded._id;
       next();

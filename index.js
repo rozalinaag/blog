@@ -1,14 +1,16 @@
 import express from 'express';
-import jwt from 'jsonwebtoken';
-import bcrypt from 'bcrypt';
+import multer from 'multer';
 import mongoose from 'mongoose';
-import { password, keySecret, auth } from './private.js';
-
-import { registerValidator } from './validations/auth.js';
-import { validationResult } from 'express-validator';
-import UserModel from './models/User.js';
-import checkAuth from './utils/checkAuth.js';
-import User from './models/User.js';
+import { password, auth } from './private.js';
+import fs from 'fs';
+import cors from 'cors';
+import {
+  registerValidation,
+  loginValidation,
+  postCreateValidation,
+} from './validations.js';
+import { UserController, PostController } from './controllers/index.js';
+import { handleValidationErrors, checkAuth } from './utils/index.js';
 
 mongoose
   .connect(
@@ -23,112 +25,60 @@ mongoose
 
 const app = express();
 
+const storage = multer.diskStorage({
+  destination: (_, __, cb) => {
+    if (!fs.existsSync('uploads')) {
+      fs.mkdirSync('uploads');
+    }
+    cb(null, 'uploads');
+  },
+  filename: (_, file, cb) => {
+    cb(null, file.originalname);
+  },
+});
+
+const upload = multer({ storage });
+
 app.use(express.json());
+app.use(cors());
+app.use('/uploads', express.static('uploads'));
 
 //авторизация
-app.post('/auth/login', async (req, res) => {
-  try {
-    //чтобы сделать авторизацию необходимо найти пользователя в БД
-    const user = await UserModel.findOne({ email: req.body.email });
-
-    if (!user) {
-      return res.status(404).json({
-        message: 'User не существует',
-      });
-    }
-
-    const isValidPass = await bcrypt.compare(
-      req.body.password,
-      user._doc.passwordHash
-    );
-
-    if (!isValidPass) {
-      return res.status(400).json({
-        message: 'Неправильный логин или же пароль',
-      });
-    }
-
-    const token = jwt.sign(
-      {
-        _id: user._id,
-      },
-      keySecret,
-      {
-        expiresIn: '30d', //перестанет быть валидным через 30 дней
-      }
-    );
-
-    res.json({
-      ...user._doc,
-      token,
-    });
-  } catch (err) {
-    console.log(err);
-    res.status(500).json({
-      message: 'Авторизация не пройдена',
-    });
-  }
-});
-
+app.post(
+  '/auth/login',
+  loginValidation,
+  handleValidationErrors,
+  UserController.login
+);
 //Авторизован ли пользователь
-app.get('/auth/me', checkAuth, async (req, res) => {
-  try {
-    const User = await UserModel.findById(req.userId);
-
-    if (!User) {
-      return res.status(404).json({
-        message: 'No user',
-      });
-    }
-    res.json(User);
-  } catch (err) {
-    console.log(err);
-    res.status(500).json({
-      message: 'Нет пользователя',
-    });
-  }
-});
-
+app.get('/auth/me', checkAuth, UserController.getMe);
 //регистрация пользователя
-app.post('/auth/register', registerValidator, async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json(errors.array());
-    }
+app.post(
+  '/auth/register',
+  registerValidation,
+  handleValidationErrors,
+  UserController.register
+);
+app.get('/posts', PostController.getAll);
+app.get('/posts/tags', PostController.getLastTags);
+app.get('/posts/:id', PostController.getOne);
+app.post('/posts', checkAuth, postCreateValidation, PostController.create);
+app.delete('/posts/:id', checkAuth, PostController.remove);
 
-    const password = req.body.password;
-    const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash(password, salt);
-
-    const doc = new UserModel({
-      email: req.body.email,
-      fullName: req.body.fullName,
-      avatarUrl: req.body.avatarUrl,
-      passwordHash,
-    });
-    const user = await doc.save();
-
-    const token = jwt.sign(
-      {
-        _id: user._id,
-      },
-      'key89',
-      {
-        expiresIn: '30d', //перестанет быть валидным через 30 дней
-      }
-    );
-    res.json({
-      ...user._doc,
-      token,
-    });
-  } catch (err) {
-    console.log(err);
-    res.status(500).json({
-      message: 'Регистрация пользователя не пройдена',
-    });
-  }
+app.post('/upload', checkAuth, upload.single('image'), (req, res) => {
+  res.json({
+    url: `/uploads/${req.file.originalname}`,
+  });
 });
+
+//обновление
+app.patch(
+  '/posts/:id',
+  checkAuth,
+  postCreateValidation,
+  handleValidationErrors,
+  PostController.update
+);
 
 app.listen(4444, (err) => {
   if (err) {
