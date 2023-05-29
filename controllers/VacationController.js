@@ -1,4 +1,4 @@
-import PostModel from '../models/Post.js';
+import PostModel from '../models/Vacation.js';
 
 export const getLastTags = async (req, res) => {
   try {

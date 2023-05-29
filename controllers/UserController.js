@@ -90,7 +90,7 @@ export const login = async (req, res) => {
 
 export const getMe = async (req, res) => {
   try {
-    const User = await UserModel.findById(req.body.userId);
+    const User = await UserModel.findById(req.userId);
 
     console.log(req);
 
@@ -99,7 +99,8 @@ export const getMe = async (req, res) => {
         message: 'No user',
       });
     }
-    res.json(User);
+    const { passwordHash, ...userData } = User._doc;
+    res.json(userData);
   } catch (err) {
     console.log(err);
     res.status(500).json({

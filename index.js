@@ -59,6 +59,8 @@ app.post(
   handleValidationErrors,
   UserController.register
 );
+
+app.get('/tags', PostController.getLastTags);
 app.get('/posts', PostController.getAll);
 app.get('/posts/tags', PostController.getLastTags);
 app.get('/posts/:id', PostController.getOne);
